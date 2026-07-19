@@ -1,0 +1,23 @@
+# Copy to config.yaml (or set the equivalent env vars — env vars win).
+# Every setting is optional; the app starts degraded-but-alive with none.
+
+# Meshtastic node over WiFi/TCP (API port 4403). Leave empty until the
+# node's WiFi is enabled — the panel will show "disabled" instead of erroring.
+meshtastic_host: ""        # e.g. "192.168.1.230"
+meshtastic_port: 4403
+
+# Existing Mosquitto broker.
+#  - running natively on Windows: use the host LAN IP 192.168.1.10
+#  - running inside Docker Desktop: use host.docker.internal (the host's own
+#    LAN IP is not reachable from inside a container — WSL2 hairpin issue)
+# Never the Docker-internal 172.17.x address (changes on container
+# recreation — caused real outages in this stack).
+mqtt_host: "192.168.1.10"
+mqtt_port: 1883
+mqtt_username: ""
+mqtt_password: ""
+# Meshtastic JSON uplink topics ("+" = region, e.g. US)
+mqtt_topic: "msh/+/2/json/#"
+
+http_port: 8080
+message_log_size: 500

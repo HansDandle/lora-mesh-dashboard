@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LoRa Mesh Dashboard</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header class="topbar">
+  <h1>LoRa Mesh Dashboard</h1>
+  <div class="topbar-status">
+    <button id="alerts-btn" class="toggle-btn" type="button">🔔 Enable alerts</button>
+    <span id="ws-status" class="pill pill-unknown">● backend: connecting…</span>
+  </div>
+</header>
+<div id="alert-banner" class="alert-banner" role="alert" hidden></div>
+
+<main class="panels">
+
+  <!-- ============ Meshtastic (separate network #1) ============ -->
+  <section class="panel panel-meshtastic" aria-labelledby="mesh-title">
+    <div class="panel-head">
+      <h2 id="mesh-title"><span class="net-dot net-mesh" aria-hidden="true"></span>Meshtastic</h2>
+      <span class="net-tag">LoRa mesh · US915</span>
+    </div>
+
+    <div class="pill-row">
+      <span id="mesh-tcp-status" class="pill pill-unknown">● node TCP: —</span>
+      <span id="mqtt-status" class="pill pill-unknown">● MQTT: —</span>
+      <button id="mesh-toggle" class="toggle-btn" type="button">Release to phone</button>
+    </div>
+
+    <div class="tiles" id="mesh-tiles">
+      <div class="tile"><div class="tile-label">Battery</div><div class="tile-value" id="tile-battery">—</div></div>
+      <div class="tile"><div class="tile-label">Voltage</div><div class="tile-value" id="tile-voltage">—</div></div>
+      <div class="tile"><div class="tile-label">SNR</div><div class="tile-value" id="tile-snr">—</div></div>
+      <div class="tile"><div class="tile-label">Uptime</div><div class="tile-value" id="tile-uptime">—</div></div>
+    </div>
+
+    <h3>Signal history</h3>
+    <div class="spark-row">
+      <figure class="spark">
+        <figcaption class="spark-label">Best SNR <span id="spark-snr-now" class="spark-now">—</span></figcaption>
+        <svg id="spark-snr" class="spark-svg" viewBox="0 0 200 40" preserveAspectRatio="none" aria-hidden="true"></svg>
+      </figure>
+      <figure class="spark">
+        <figcaption class="spark-label">RF nodes heard <span id="spark-rf-now" class="spark-now">—</span></figcaption>
+        <svg id="spark-rf" class="spark-svg" viewBox="0 0 200 40" preserveAspectRatio="none" aria-hidden="true"></svg>
+      </figure>
+    </div>
+
+    <h3>Known nodes</h3>
+    <div class="table-wrap">
+      <table id="nodes-table">
+        <thead><tr><th>Node</th><th>Battery</th><th>SNR</th><th>Last heard</th><th>Contact</th></tr></thead>
+        <tbody><tr><td colspan="5" class="empty">No nodes heard yet</td></tr></tbody>
+      </table>
+    </div>
+
+    <h3>Messages</h3>
+    <ul id="message-log" class="msg-log" aria-live="polite">
+      <li class="empty">No messages yet</li>
+    </ul>
+
+    <form id="send-form" class="send-row">
+      <input id="send-text" type="text" maxlength="200" placeholder="Send a test message…"
+             autocomplete="off" aria-label="Message text">
+      <button type="submit">Send</button>
+    </form>
+    <p id="send-result" class="send-result" role="status"></p>
+  </section>
+
+  <!-- ============ MeshCore (separate network #2 — Board 2) ============ -->
+  <section class="panel panel-meshcore" aria-labelledby="mc-title">
+    <div class="panel-head">
+      <h2 id="mc-title"><span class="net-dot net-mc" aria-hidden="true"></span>MeshCore</h2>
+      <span class="net-tag">Board 2 · community mesh</span>
+    </div>
+
+    <div class="pill-row">
+      <span id="mc-status" class="pill pill-unknown">● node: —</span>
+      <button id="mc-toggle" class="toggle-btn" type="button">Release to phone</button>
+    </div>
+
+    <div class="tiles">
+      <div class="tile"><div class="tile-label">Name</div><div class="tile-value" id="mc-name">—</div></div>
+      <div class="tile"><div class="tile-label">Battery</div><div class="tile-value" id="mc-battery">—</div></div>
+      <div class="tile"><div class="tile-label">Contacts</div><div class="tile-value" id="mc-contact-count">—</div></div>
+    </div>
+
+    <h3>Radio &amp; actions</h3>
+    <div class="mc-actions">
+      <button id="mc-advert" class="toggle-btn" type="button">Send advert</button>
+      <span id="mc-radio-info" class="radio-info">—</span>
+    </div>
+    <details class="mc-radio-set">
+      <summary>Set radio (match Austin's numbers)</summary>
+      <div class="radio-form">
+        <label>Freq<input id="rf-freq" type="number" step="0.001" placeholder="910.525"></label>
+        <label>BW<input id="rf-bw" type="number" step="0.1" placeholder="62.5"></label>
+        <label>SF<input id="rf-sf" type="number" min="5" max="12" placeholder="7"></label>
+        <label>CR<input id="rf-cr" type="number" min="5" max="8" placeholder="5"></label>
+        <button id="rf-apply" class="toggle-btn" type="button">Apply</button>
+      </div>
+      <p id="rf-result" class="send-result" role="status"></p>
+    </details>
+
+    <h3>Contacts</h3>
+    <div class="table-wrap">
+      <table id="mc-contacts-table">
+        <thead><tr><th>Name</th><th>Last advert</th></tr></thead>
+        <tbody><tr><td colspan="2" class="empty">No contacts yet</td></tr></tbody>
+      </table>
+    </div>
+
+    <h3>Messages</h3>
+    <ul id="mc-message-log" class="msg-log" aria-live="polite">
+      <li class="empty">No messages yet</li>
+    </ul>
+
+    <form id="mc-send-form" class="send-row">
+      <input id="mc-send-to" type="text" class="send-to" placeholder="To (contact)"
+             list="mc-contacts-list" autocomplete="off" aria-label="Recipient contact">
+      <datalist id="mc-contacts-list"></datalist>
+      <input id="mc-send-text" type="text" maxlength="200" placeholder="Message…"
+             autocomplete="off" aria-label="Message text">
+      <button type="submit">Send</button>
+    </form>
+    <p id="mc-send-result" class="send-result" role="status"></p>
+
+    <p class="footnote">Meshtastic (left) and MeshCore are two independent
+    networks/protocols — separate boards, separate data.</p>
+  </section>
+
+</main>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

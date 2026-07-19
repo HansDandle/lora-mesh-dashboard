@@ -1,0 +1,227 @@
+/* Tokens: light mode defaults, dark via prefers-color-scheme.
+   Network identity hues (categorical): Meshtastic = green, Reticulum = violet.
+   Status colors (good/warning/critical) are reserved and always paired with
+   a text label — never color alone. */
+:root {
+  color-scheme: light;
+  --page: #f9f9f7;
+  --surface: #fcfcfb;
+  --ink: #0b0b0b;
+  --ink-2: #52514e;
+  --muted: #898781;
+  --hairline: #e1e0d9;
+  --border: rgba(11, 11, 11, 0.10);
+  --net-mesh: #008300;
+  --net-meshcore: #eb6834;
+  --contact-relay: #2a78d6;
+  --status-good: #006300;
+  --status-warn: #9a6a00;
+  --status-crit: #d03b3b;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --page: #0d0d0d;
+    --surface: #1a1a19;
+    --ink: #ffffff;
+    --ink-2: #c3c2b7;
+    --muted: #898781;
+    --hairline: #2c2c2a;
+    --border: rgba(255, 255, 255, 0.10);
+    --net-mesh: #00a300;
+    --net-meshcore: #eb6834;
+    --contact-relay: #3987e5;
+    --status-good: #0ca30c;
+    --status-warn: #fab219;
+    --status-crit: #d03b3b;
+  }
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--page);
+  color: var(--ink);
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 15px;
+  line-height: 1.45;
+}
+
+.topbar {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.9rem 1.4rem;
+  border-bottom: 1px solid var(--hairline);
+}
+.topbar h1 { font-size: 1.15rem; margin: 0; font-weight: 650; }
+
+.alert-banner {
+  background: var(--status-crit);
+  color: #fff;
+  padding: 0.5rem 1.4rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.panels {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: 1.2rem;
+  padding: 1.2rem 1.4rem;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1.1rem 1.2rem 1.3rem;
+  min-width: 0;
+}
+/* Identity: colored top edge + dot, plus the text label — never color alone */
+.panel-meshtastic { border-top: 4px solid var(--net-mesh); }
+.panel-meshcore   { border-top: 4px solid var(--net-meshcore); }
+
+.panel-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.6rem;
+  margin-bottom: 0.7rem;
+}
+.panel-head h2 { font-size: 1.05rem; margin: 0; display: flex; align-items: center; gap: 0.5rem; }
+.net-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.net-mesh { background: var(--net-mesh); }
+.net-mc   { background: var(--net-meshcore); }
+.net-tag { color: var(--muted); font-size: 0.8rem; white-space: nowrap; }
+
+h3 { font-size: 0.85rem; color: var(--ink-2); text-transform: uppercase; letter-spacing: 0.04em; margin: 1.1rem 0 0.45rem; }
+
+.pill-row { display: flex; flex-wrap: wrap; gap: 0.45rem; margin-bottom: 0.9rem; }
+.pill {
+  font-size: 0.78rem;
+  padding: 0.18rem 0.6rem;
+  border-radius: 999px;
+  border: 1px solid var(--hairline);
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+.toggle-btn {
+  font-size: 0.75rem;
+  padding: 0.15rem 0.65rem;
+  border-radius: 999px;
+  border: 1px solid var(--hairline);
+  background: var(--surface);
+  color: var(--ink-2);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.75rem;
+}
+.toggle-btn:hover { border-color: var(--net-meshcore); color: var(--net-meshcore); }
+.toggle-btn:disabled { opacity: 0.5; cursor: default; }
+
+.pill-good    { color: var(--status-good); border-color: currentColor; }
+.pill-bad     { color: var(--status-crit); border-color: currentColor; }
+.pill-unknown { color: var(--muted); }
+
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 0.6rem;
+}
+.tile {
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  padding: 0.55rem 0.7rem;
+}
+.tile-label { font-size: 0.72rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+.tile-value { font-size: 1.35rem; font-weight: 650; margin-top: 0.1rem; }
+
+.spark-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; }
+.spark { margin: 0; border: 1px solid var(--hairline); border-radius: 8px; padding: 0.5rem 0.6rem; }
+.spark-label { font-size: 0.72rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.spark-now { color: var(--ink); font-weight: 650; text-transform: none; letter-spacing: 0; margin-left: 0.3rem; }
+.spark-svg { display: block; width: 100%; height: 40px; margin-top: 0.3rem; }
+
+.table-wrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 0.85rem; }
+th {
+  text-align: left; color: var(--muted); font-weight: 500;
+  border-bottom: 1px solid var(--hairline); padding: 0.3rem 0.6rem 0.3rem 0;
+}
+td {
+  border-bottom: 1px solid var(--hairline);
+  padding: 0.35rem 0.6rem 0.35rem 0;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+td.empty, li.empty { color: var(--muted); font-style: italic; white-space: normal; }
+
+.msg-log {
+  list-style: none; margin: 0; padding: 0;
+  max-height: 260px; overflow-y: auto;
+  border: 1px solid var(--hairline); border-radius: 8px;
+  font-size: 0.85rem;
+}
+.msg-log li { padding: 0.4rem 0.7rem; border-bottom: 1px solid var(--hairline); }
+.msg-log li:last-child { border-bottom: none; }
+.msg-meta { color: var(--muted); font-size: 0.75rem; margin-right: 0.5rem; }
+.msg-tx .msg-meta::before { content: "↑ "; }
+.msg-rx .msg-meta::before { content: "↓ "; }
+
+.send-row { display: flex; gap: 0.5rem; margin-top: 0.7rem; }
+.send-row input {
+  flex: 1; min-width: 0;
+  background: var(--page); color: var(--ink);
+  border: 1px solid var(--hairline); border-radius: 8px;
+  padding: 0.45rem 0.7rem; font: inherit;
+}
+.send-row button {
+  background: var(--net-mesh); color: #fff;
+  border: none; border-radius: 8px;
+  padding: 0.45rem 1rem; font: inherit; font-weight: 600;
+  cursor: pointer;
+}
+.send-row button:disabled { opacity: 0.5; cursor: default; }
+.send-to { flex: 0 1 8rem; max-width: 8rem; }
+.panel-meshcore .send-row button { background: var(--net-meshcore); }
+.send-result { font-size: 0.8rem; margin: 0.35rem 0 0; min-height: 1.2em; color: var(--ink-2); }
+
+.rns-card {
+  border: 1px dashed var(--hairline);
+  border-radius: 8px;
+  padding: 0.8rem 0.9rem;
+  margin-bottom: 0.9rem;
+}
+.rns-detail-text { margin: 0; color: var(--ink-2); }
+
+/* Contact-type badges in the node table. Each carries a text label, so
+   meaning is never color-alone. */
+.badge {
+  font-size: 0.72rem;
+  padding: 0.12rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  white-space: nowrap;
+}
+.badge-rf     { color: var(--status-good); }      /* heard directly over our radio */
+.badge-relay  { color: var(--contact-relay); }     /* heard through the mesh */
+.badge-mqtt   { color: var(--muted); }             /* internet-bridged, not RF */
+.badge-self,
+.badge-unknown { color: var(--muted); }
+
+.mc-actions { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+.radio-info { font-size: 0.8rem; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.mc-radio-set { margin-top: 0.6rem; font-size: 0.82rem; }
+.mc-radio-set summary { cursor: pointer; color: var(--ink-2); }
+.radio-form { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: flex-end; margin-top: 0.5rem; }
+.radio-form label { display: flex; flex-direction: column; font-size: 0.7rem; color: var(--muted); gap: 0.15rem; }
+.radio-form input {
+  width: 5.5rem; background: var(--page); color: var(--ink);
+  border: 1px solid var(--hairline); border-radius: 6px; padding: 0.3rem 0.4rem; font: inherit;
+}
+
+.footnote { color: var(--muted); font-size: 0.78rem; margin-top: 1.1rem; }

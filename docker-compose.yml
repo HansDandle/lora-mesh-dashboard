@@ -1,0 +1,35 @@
+services:
+  lora-dashboard:
+    build: ./dashboard
+    container_name: lora-dashboard
+    # This stack has a history of things going down silently (WSL2 restarts,
+    # firewall quirks) — always restart.
+    restart: unless-stopped
+    ports:
+      # Host 8090 — 8080 is taken by gluetun/qbittorrent on this stack.
+      - "8090:8080"
+    volumes:
+      # Persist message log + metrics history across container recreations.
+      - lora-data:/data
+    environment:
+      # Board 1 (Heltec V3, node !xxxxxxxx) once WiFi was enabled.
+      MESHTASTIC_HOST: "${MESHTASTIC_HOST:-192.168.1.50}"
+      # Board 2 (Heltec V3, MeshCore WiFi companion "MeshNode"), TCP port 5000.
+      # The WiFi companion accepts only ONE TCP client at a time; use the
+      # dashboard's "Release to phone" button to hand the slot to the app.
+      MESHCORE_HOST: "${MESHCORE_HOST:-192.168.1.51}"
+      # From inside a Docker Desktop container, the host's own LAN IP
+      # (192.168.1.10) is NOT reachable (WSL2 hairpin) — host.docker.internal
+      # is the stable route to the published Mosquitto port. The "use the LAN
+      # IP, never 172.17.x" rule still applies to everything outside Docker.
+      MQTT_HOST: "${MQTT_HOST:-host.docker.internal}"
+      MQTT_PORT: "${MQTT_PORT:-1883}"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/api/status', timeout=5)"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+volumes:
+  lora-data:

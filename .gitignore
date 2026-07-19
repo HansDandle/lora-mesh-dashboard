@@ -1,0 +1,5 @@
+__pycache__/
+*.pyc
+dashboard/config.yaml
+.venv/
+*.db
