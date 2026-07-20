@@ -14,6 +14,14 @@ function fmtAgo(epochSecs) {
   return `${Math.floor(s / 86400)}d ago`;
 }
 
+function hopLabel(h) {
+  // MeshCore cached path length: 0 = heard directly, N = via N repeaters,
+  // <0 or null = flood (no cached path yet).
+  if (h == null || h < 0) return "🛰 flood (no direct path)";
+  if (h === 0) return "🛰 0 hops (direct)";
+  return `🛰 ${h} hop${h === 1 ? "" : "s"}`;
+}
+
 function fmtUptime(secs) {
   if (secs == null) return "—";
   const d = Math.floor(secs / 86400), h = Math.floor((secs % 86400) / 3600),
@@ -294,26 +302,34 @@ async function loadMapContacts() {
     _markers.clearLayers();
     const pts = [];
     located.forEach((c) => {
+      // MeshCore contact types: 1 = companion (DM target), 2 = repeater,
+      // 3 = room server (you join/post to it, not a DM target).
       const rep = c.type === 2;
+      const room = c.type === 3;
+      const kind = rep ? "◆ Repeater" : room ? "▣ Room server" : "● Companion";
+      const fill = rep ? "#eb6834" : room ? "#a875e0" : "#4bd07a";
       const nm = c.name || c.key || "?";
       const mk = L.circleMarker([c.lat, c.lon], {
         radius: 6, weight: 1, color: "#1a1a19",
-        fillColor: rep ? "#eb6834" : "#4bd07a", fillOpacity: 0.85,
+        fillColor: fill, fillOpacity: 0.85,
       });
       const esc = (s) => String(s).replace(/[<>&]/g,
         (m) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" }[m]));
       const info = [
         `<b>${esc(nm)}</b>`,
-        `${rep ? "◆ Repeater" : "● Companion"} · <code>${esc((c.key || "").slice(0, 10))}</code>`,
+        `${kind} · <code>${esc((c.key || "").slice(0, 10))}</code>`,
         `📍 ${(+c.lat).toFixed(4)}, ${(+c.lon).toFixed(4)}`,
+        hopLabel(c.hops),
         c.last_advert ? `last advert: ${fmtAgo(c.last_advert)}` : null,
         c.first_seen ? `first seen: ${fmtAgo(c.first_seen)}` : null,
         c.last_seen ? `logged: ${fmtAgo(c.last_seen)}` : null,
       ].filter(Boolean).join("<br>");
       mk.bindTooltip(info, { direction: "top", opacity: 0.96 });
       const safe = nm.replace(/[<>]/g, "").replace(/'/g, "\\'");
+      // Only companions are direct-message targets.
+      const canDM = !rep && !room;
       mk.bindPopup(info +
-        (rep ? "" : `<br><a href="#" onclick="window._dm('${safe}');return false;">✉ message</a>`));
+        (canDM ? `<br><a href="#" onclick="window._dm('${safe}');return false;">✉ message</a>` : ""));
       // don't let the hover tooltip cover the popup's message link
       mk.on("popupopen", () => mk.unbindTooltip());
       mk.on("popupclose", () => mk.bindTooltip(info, { direction: "top", opacity: 0.96 }));

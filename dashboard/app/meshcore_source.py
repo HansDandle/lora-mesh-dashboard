@@ -83,10 +83,14 @@ class MeshCoreSource:
         mc = self.mc
         if mc is None:
             raise RuntimeError("MeshCore node is not connected")
+        from meshcore import EventType
         contact = mc.get_contact_by_name(to)
         if contact is None:
-            raise RuntimeError(f"no MeshCore contact named {to!r}")
-        from meshcore import EventType
+            # Not on the node's live list — re-add it from the durable contact
+            # log so the firmware has a routing record, then send. (MeshCore
+            # returns ERR_CODE_NOT_FOUND if you try to message a bare pubkey it
+            # doesn't hold as a contact.)
+            contact = await self._readd_from_log(to)
         result = await mc.commands.send_msg(contact, text)
         if getattr(result, "type", None) == EventType.ERROR:
             raise RuntimeError(f"send failed: {result.payload}")
@@ -94,6 +98,51 @@ class MeshCoreSource:
             "network": "meshcore", "direction": "tx",
             "from": "me", "to": to, "text": text,
         })
+
+    async def _readd_from_log(self, to: str):
+        """Rebuild a node contact record from the DB log and add it back, so a
+        contact that aged off the node (or was cleared by a reboot) becomes
+        messageable again. Adds it as a flood contact (no cached path)."""
+        row = None
+        if self.state.persistence is not None:
+            try:
+                row = self.state.persistence.find_contact_by_name(to)
+            except Exception:
+                row = None
+        if row is None:
+            raise RuntimeError(f"no MeshCore contact named {to!r}")
+        ctype = row.get("type")
+        if ctype == 2:
+            raise RuntimeError(f"{to!r} is a repeater, not a messageable contact")
+        if ctype == 3:
+            raise RuntimeError(
+                f"{to!r} is a room server — join/post to the room, "
+                "it's not a direct-message contact")
+        data = row.get("data") or {}
+        key = row.get("key") or data.get("public_key")
+        if not key:
+            raise RuntimeError(f"no public key on record for {to!r}")
+        lat = row.get("lat") if row.get("lat") is not None else data.get("adv_lat")
+        lon = row.get("lon") if row.get("lon") is not None else data.get("adv_lon")
+        contact = {
+            "public_key": key,
+            "type": int(ctype or 1),
+            "flags": 0,
+            "out_path": "",
+            "out_path_len": -1,            # -1 -> flood (no cached path)
+            "out_path_hash_mode": 0,
+            "adv_name": row.get("name") or to,
+            "last_advert": int(data.get("last_advert") or 0),
+            "adv_lat": float(lat or 0),
+            "adv_lon": float(lon or 0),
+        }
+        from meshcore import EventType
+        r = await self.mc.commands.add_contact(contact)
+        if getattr(r, "type", None) == EventType.ERROR:
+            raise RuntimeError(f"couldn't re-add {to!r}: {r.payload}")
+        await self._refresh_contacts()
+        live = self.mc.get_contact_by_name(to)
+        return live if live is not None else contact
 
     async def send_advert(self, flood: bool = True) -> None:
         mc = self.mc
@@ -235,5 +284,8 @@ class MeshCoreSource:
                 "type": c.get("type"),
                 "adv_lat": c.get("adv_lat"),
                 "adv_lon": c.get("adv_lon"),
+                # cached routing path length: 0 = heard direct, N = N hops,
+                # <0 = flood (no path yet). Surfaced as "hops" on the map.
+                "path_len": c.get("out_path_len"),
             })
         self.state.set_meshcore_contacts(out)

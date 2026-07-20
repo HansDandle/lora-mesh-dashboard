@@ -35,6 +35,12 @@ class Persistence:
             "first_seen REAL, last_seen REAL, last_advert REAL, "
             "lat REAL, lon REAL, data TEXT)"
         )
+        # Additive migration: `hops` (cached path length) came later. Older DBs
+        # won't have the column, so add it if missing.
+        cols = {r[1] for r in self.conn.execute(
+            "PRAGMA table_info(meshcore_contacts)").fetchall()}
+        if "hops" not in cols:
+            self.conn.execute("ALTER TABLE meshcore_contacts ADD COLUMN hops INTEGER")
         self.conn.commit()
 
     def save_message(self, network: str, msg: dict[str, Any]) -> None:
@@ -70,25 +76,47 @@ class Persistence:
                     continue
                 self.conn.execute(
                     "INSERT INTO meshcore_contacts"
-                    "(key, name, type, first_seen, last_seen, last_advert, lat, lon, data) "
-                    "VALUES (?,?,?,?,?,?,?,?,?) "
+                    "(key, name, type, first_seen, last_seen, last_advert, lat, lon, hops, data) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?) "
                     "ON CONFLICT(key) DO UPDATE SET name=excluded.name, type=excluded.type, "
                     "last_seen=excluded.last_seen, last_advert=excluded.last_advert, "
-                    "lat=excluded.lat, lon=excluded.lon, data=excluded.data",
+                    "lat=excluded.lat, lon=excluded.lon, hops=excluded.hops, data=excluded.data",
                     (key, c.get("name"), c.get("type"), now, now, c.get("last_advert"),
                      c.get("lat") if c.get("lat") is not None else c.get("adv_lat"),
                      c.get("lon") if c.get("lon") is not None else c.get("adv_lon"),
+                     c.get("hops") if c.get("hops") is not None else c.get("path_len"),
                      json.dumps(c)),
                 )
             self.conn.commit()
 
     def load_contacts(self) -> list[dict[str, Any]]:
-        cols = ("key", "name", "type", "first_seen", "last_seen", "last_advert", "lat", "lon")
+        cols = ("key", "name", "type", "first_seen", "last_seen", "last_advert", "lat", "lon", "hops")
         with self._lock:
             rows = self.conn.execute(
                 f"SELECT {', '.join(cols)} FROM meshcore_contacts ORDER BY last_seen DESC"
             ).fetchall()
         return [dict(zip(cols, r)) for r in rows]
+
+    def find_contact_by_name(self, name: str) -> dict[str, Any] | None:
+        """Look up a logged contact by display name (case-insensitive).
+
+        Returns the stored row incl. the full public key, so we can message a
+        contact that's in the log but no longer on the node's live list."""
+        with self._lock:
+            row = self.conn.execute(
+                "SELECT key, name, type, lat, lon, data FROM meshcore_contacts "
+                "WHERE name = ? COLLATE NOCASE ORDER BY last_seen DESC LIMIT 1",
+                (name,),
+            ).fetchone()
+        if row is None:
+            return None
+        key, nm, typ, lat, lon, data = row
+        out = {"key": key, "name": nm, "type": typ, "lat": lat, "lon": lon}
+        try:
+            out["data"] = json.loads(data) if data else {}
+        except Exception:
+            out["data"] = {}
+        return out
 
     def count_contacts(self) -> int:
         with self._lock:
