@@ -310,10 +310,13 @@ async function loadMapContacts() {
         c.first_seen ? `first seen: ${fmtAgo(c.first_seen)}` : null,
         c.last_seen ? `logged: ${fmtAgo(c.last_seen)}` : null,
       ].filter(Boolean).join("<br>");
-      mk.bindTooltip(info, { direction: "top", sticky: true, opacity: 0.96 });
+      mk.bindTooltip(info, { direction: "top", opacity: 0.96 });
       const safe = nm.replace(/[<>]/g, "").replace(/'/g, "\\'");
       mk.bindPopup(info +
         (rep ? "" : `<br><a href="#" onclick="window._dm('${safe}');return false;">✉ message</a>`));
+      // don't let the hover tooltip cover the popup's message link
+      mk.on("popupopen", () => mk.unbindTooltip());
+      mk.on("popupclose", () => mk.bindTooltip(info, { direction: "top", opacity: 0.96 }));
       _markers.addLayer(mk);
       pts.push([c.lat, c.lon]);
     });
