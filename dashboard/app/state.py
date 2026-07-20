@@ -32,6 +32,7 @@ class DashboardState:
         # ~4h at 60s spacing.
         self._history: deque[dict[str, Any]] = deque(maxlen=240)
         self._version = 0
+        self._meshcore_logged = 0  # count of contacts durably logged to the DB
         # Optional Persistence handle; set by main after construction.
         self.persistence = None
 
@@ -100,6 +101,12 @@ class DashboardState:
         with self._lock:
             self._meshcore_contacts = {c["key"]: c for c in contacts if c.get("key")}
             self._notify()
+        if self.persistence is not None:
+            try:
+                self.persistence.upsert_contacts(contacts)
+                self._meshcore_logged = self.persistence.count_contacts()
+            except Exception:
+                pass
 
     def add_meshcore_message(self, message: dict[str, Any]) -> None:
         with self._lock:
@@ -148,6 +155,7 @@ class DashboardState:
                 self._meshcore_messages.append(m)
             for p in persistence.load_history(self._history.maxlen):
                 self._history.append(p)
+        self._meshcore_logged = persistence.count_contacts()
 
     # -- reader -------------------------------------------------------------
 
@@ -164,6 +172,7 @@ class DashboardState:
                     "self": dict(self._meshcore_self),
                     "contacts": [dict(c) for c in self._meshcore_contacts.values()],
                     "messages": [dict(m) for m in self._meshcore_messages],
+                    "logged": self._meshcore_logged,
                 },
                 "history": [dict(p) for p in self._history],
                 "server_time": time.time(),

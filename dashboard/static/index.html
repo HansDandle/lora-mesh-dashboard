@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>LoRa Mesh Dashboard</title>
 <link rel="stylesheet" href="/static/style.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 </head>
 <body>
 <header class="topbar">
@@ -113,6 +114,8 @@
         <tbody><tr><td colspan="2" class="empty">No contacts yet</td></tr></tbody>
       </table>
     </div>
+    <p class="mc-log"><span id="mc-logged">0</span> contacts logged to the dashboard database ·
+      <a href="/api/meshcore/contacts.csv" download>download CSV</a></p>
 
     <h3>Messages</h3>
     <ul id="mc-message-log" class="msg-log" aria-live="polite">
@@ -135,6 +138,18 @@
 
 </main>
 
+<section class="mapwrap" aria-label="MeshCore contact map">
+  <div class="map-head">
+    <h2><span class="net-dot net-mc" aria-hidden="true"></span>MeshCore contact map</h2>
+    <span class="net-tag"><span id="map-count">0</span> located · <a href="#" id="map-refresh">refresh</a></span>
+  </div>
+  <div id="map"></div>
+  <p class="map-note">Every located contact the dashboard has ever logged (repeaters
+    <span style="color:var(--net-meshcore)">■</span>, companions
+    <span style="color:#4bd07a">■</span>). Click a marker to message that contact.</p>
+</section>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="/static/app.js"></script>
 </body>
 </html>

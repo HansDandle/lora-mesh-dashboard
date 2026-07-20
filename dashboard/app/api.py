@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import asyncio
+import csv
+import io
 import logging
 
 from fastapi import APIRouter, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
 log = logging.getLogger("api")
@@ -117,6 +120,31 @@ async def meshtastic_pause(request: Request):
 async def meshtastic_resume(request: Request):
     request.app.state.meshtastic.resume()
     return {"ok": True, "paused": False}
+
+
+@router.get("/api/meshcore/contacts")
+def meshcore_contacts(request: Request):
+    """The durable contact log — every MeshCore contact ever seen, even ones
+    later pruned off the node."""
+    p = request.app.state.dashboard.persistence
+    rows = p.load_contacts() if p is not None else []
+    return {"count": len(rows), "contacts": rows}
+
+
+@router.get("/api/meshcore/contacts.csv")
+def meshcore_contacts_csv(request: Request):
+    p = request.app.state.dashboard.persistence
+    rows = p.load_contacts() if p is not None else []
+    cols = ["key", "name", "type", "first_seen", "last_seen", "last_advert", "lat", "lon"]
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(cols)
+    for r in rows:
+        w.writerow([r.get(c) for c in cols])
+    return Response(
+        content=buf.getvalue(), media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=meshcore_contacts.csv"},
+    )
 
 
 @router.websocket("/ws")

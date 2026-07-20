@@ -157,6 +157,7 @@ function renderMeshCore(snap) {
 
   const contacts = mc.contacts || [];
   $("mc-contact-count").textContent = contacts.length || "0";
+  $("mc-logged").textContent = mc.logged != null ? mc.logged : 0;
   $("mc-contacts-list").replaceChildren(...contacts.map((c) => {
     const o = document.createElement("option");
     o.value = c.name || c.key;
@@ -170,11 +171,14 @@ function renderMeshCore(snap) {
     const sorted = [...contacts].sort((a, b) => (b.last_advert || 0) - (a.last_advert || 0));
     tbody.replaceChildren(...sorted.map((c) => {
       const tr = document.createElement("tr");
+      tr.style.cursor = "pointer";
+      tr.title = "Click to message";
       for (const text of [c.name || c.key, c.last_advert ? fmtAgo(c.last_advert) : "—"]) {
         const td = document.createElement("td");
         td.textContent = text;
         tr.appendChild(td);
       }
+      tr.addEventListener("click", () => dmContact(c.name || c.key));
       return tr;
     }));
   }
@@ -256,6 +260,60 @@ function render(snap) {
   renderSignalHistory(snap);
   renderMeshCore(snap);
 }
+
+/* ---------- MeshCore contact map (Leaflet) ---------- */
+let _map = null, _markers = null;
+
+function dmContact(name) {
+  if (!name) return;
+  const to = $("mc-send-to");
+  to.value = name;
+  to.scrollIntoView({ behavior: "smooth", block: "center" });
+  $("mc-send-text").focus();
+}
+window._dm = dmContact;
+
+async function loadMapContacts() {
+  if (!_markers) return;
+  try {
+    const data = await (await fetch("/api/meshcore/contacts")).json();
+    const located = (data.contacts || []).filter(
+      (c) => c.lat && c.lon && Math.abs(c.lat) > 0.01);
+    $("map-count").textContent = located.length;
+    _markers.clearLayers();
+    const pts = [];
+    located.forEach((c) => {
+      const rep = c.type === 2;
+      const nm = c.name || c.key || "?";
+      const mk = L.circleMarker([c.lat, c.lon], {
+        radius: 6, weight: 1, color: "#1a1a19",
+        fillColor: rep ? "#eb6834" : "#4bd07a", fillOpacity: 0.85,
+      });
+      const safe = nm.replace(/[<>]/g, "").replace(/'/g, "\\'");
+      mk.bindPopup(
+        `<b>${nm.replace(/</g, "&lt;")}</b><br>${rep ? "Repeater" : "Companion"}<br>` +
+        `<a href="#" onclick="window._dm('${safe}');return false;">✉ message</a>`);
+      _markers.addLayer(mk);
+      pts.push([c.lat, c.lon]);
+    });
+    if (pts.length) _map.fitBounds(pts, { padding: [30, 30], maxZoom: 12 });
+  } catch (e) { /* ignore */ }
+}
+
+function initMap() {
+  if (!window.L || !document.getElementById("map")) return;
+  _map = L.map("map", { scrollWheelZoom: false }).setView([30.27, -97.74], 9);
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    attribution: "&copy; OpenStreetMap", maxZoom: 18,
+  }).addTo(_map);
+  _markers = L.layerGroup().addTo(_map);
+  loadMapContacts();
+}
+{
+  const r = $("map-refresh");
+  if (r) r.addEventListener("click", (e) => { e.preventDefault(); loadMapContacts(); });
+}
+initMap();
 
 /* ---------- websocket ---------- */
 

@@ -233,5 +233,7 @@ class MeshCoreSource:
                 "public_key": c.get("public_key"),
                 "last_advert": c.get("last_advert") or c.get("adv_timestamp"),
                 "type": c.get("type"),
+                "adv_lat": c.get("adv_lat"),
+                "adv_lon": c.get("adv_lon"),
             })
         self.state.set_meshcore_contacts(out)
