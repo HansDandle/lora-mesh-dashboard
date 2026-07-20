@@ -34,6 +34,10 @@ class MeshtasticSource:
         # Runtime "release Board 1's single TCP slot to the phone" toggle.
         self._paused = False
         self._resume_evt = threading.Event()
+        # Set on connect, cleared on the lib's "connection lost" event, so the
+        # poll loop can tell a dead link from a live one (cached node DB reads
+        # succeed even after the socket drops — that was a silent-failure hole).
+        self._link_ok = threading.Event()
 
     # -- lifecycle ----------------------------------------------------------
 
@@ -106,12 +110,14 @@ class MeshtasticSource:
                     "meshtastic_tcp", False, f"connecting to {self.host}:{self.port}")
                 from meshtastic.tcp_interface import TCPInterface
                 self.interface = TCPInterface(hostname=self.host, portNumber=self.port)
+                self._link_ok.set()
                 backoff = _BACKOFF_START
                 self._poll_until_dead()
             except Exception as exc:
                 log.warning("meshtastic connection failed: %s", exc)
                 self.state.set_source_status("meshtastic_tcp", False, str(exc))
             finally:
+                self._link_ok.clear()
                 iface, self.interface = self.interface, None
                 if iface is not None:
                     try:
@@ -126,7 +132,8 @@ class MeshtasticSource:
 
     def _poll_until_dead(self) -> None:
         """Refresh the node DB periodically while the connection lives."""
-        while not self._stop.is_set() and not self._paused and self.interface is not None:
+        while (not self._stop.is_set() and not self._paused
+               and self._link_ok.is_set() and self.interface is not None):
             try:
                 self._sync_nodedb()
             except Exception as exc:
@@ -156,6 +163,7 @@ class MeshtasticSource:
             log.warning("getMyNodeInfo failed: %s", exc)
 
     def _on_disconnected(self, interface=None, **kw) -> None:
+        self._link_ok.clear()
         self.state.set_source_status("meshtastic_tcp", False, "connection lost")
 
     def _on_receive(self, packet=None, interface=None, **kw) -> None:
