@@ -27,6 +27,7 @@ class MeshCoreSource:
         self.mc = None
         self._task: asyncio.Task | None = None
         self._stop = asyncio.Event()
+        self._channels: dict[int, str] = {}  # idx -> name, for tagging messages
         # Runtime "release the single TCP slot to the phone" toggle.
         self._paused = False
         self._wake = asyncio.Event()
@@ -98,6 +99,25 @@ class MeshCoreSource:
             "network": "meshcore", "direction": "tx",
             "from": "me", "to": to, "text": text,
         })
+
+    async def send_channel(self, idx: int, text: str) -> None:
+        mc = self.mc
+        if mc is None:
+            raise RuntimeError("MeshCore node is not connected")
+        from meshcore import EventType
+        result = await mc.commands.send_chan_msg(int(idx), text)
+        if getattr(result, "type", None) == EventType.ERROR:
+            raise RuntimeError(f"send failed: {result.payload}")
+        self.state.add_meshcore_channel_message({
+            "network": "meshcore", "direction": "tx",
+            "channel_idx": int(idx), "channel": self._channel_name(idx),
+            "from": "me", "text": text,
+        })
+
+    def _channel_name(self, idx) -> str:
+        if idx is None:
+            return "?"
+        return self._channels.get(int(idx), f"ch{idx}")
 
     async def _readd_from_log(self, to: str):
         """Rebuild a node contact record from the DB log and add it back, so a
@@ -181,11 +201,12 @@ class MeshCoreSource:
                 self.mc.subscribe(EventType.CONTACT_MSG_RECV, self._on_message)
                 chan = getattr(EventType, "CHANNEL_MSG_RECV", None)
                 if chan is not None:
-                    self.mc.subscribe(chan, self._on_message)
+                    self.mc.subscribe(chan, self._on_channel_message)
 
                 await self.mc.start_auto_message_fetching()
                 await self._refresh_self()
                 await self._refresh_contacts()
+                await self._refresh_channels()
                 self.state.set_source_status("meshcore", True, f"{self.host}:{self.port}")
 
                 while not self._stop.is_set() and not self._paused and self.mc.is_connected:
@@ -216,7 +237,19 @@ class MeshCoreSource:
         self.state.add_meshcore_message({
             "network": "meshcore",
             "direction": "rx",
-            "from": p.get("pubkey_prefix") or p.get("from") or p.get("channel") or "?",
+            "from": p.get("pubkey_prefix") or p.get("from") or "?",
+            "text": p.get("text", ""),
+        })
+
+    async def _on_channel_message(self, event) -> None:
+        p = getattr(event, "payload", None) or {}
+        idx = p.get("channel_idx")
+        self.state.add_meshcore_channel_message({
+            "network": "meshcore",
+            "direction": "rx",
+            "channel_idx": idx,
+            "channel": self._channel_name(idx),
+            "from": p.get("pubkey_prefix") or p.get("from") or "?",
             "text": p.get("text", ""),
         })
 
@@ -289,3 +322,28 @@ class MeshCoreSource:
                 "path_len": c.get("out_path_len"),
             })
         self.state.set_meshcore_contacts(out)
+
+    async def _refresh_channels(self, max_slots: int = 8) -> None:
+        """Read the node's channel slots. Channels rarely change, so this runs
+        once per connect. Only names are surfaced — secrets stay on the node."""
+        from meshcore import EventType
+        mc = self.mc
+        if mc is None:
+            return
+        chans: dict[int, str] = {}
+        out: list[dict[str, Any]] = []
+        for i in range(max_slots):
+            try:
+                r = await mc.commands.get_channel(i)
+            except Exception:
+                break
+            if getattr(r, "type", None) == EventType.ERROR:
+                continue
+            p = r.payload or {}
+            name = (p.get("channel_name") or "").strip()
+            if not name:
+                continue  # empty slot
+            chans[i] = name
+            out.append({"idx": i, "name": name})
+        self._channels = chans
+        self.state.set_meshcore_channels(out)

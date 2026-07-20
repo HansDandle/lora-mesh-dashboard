@@ -221,6 +221,41 @@ td.empty, li.empty { color: var(--muted); font-style: italic; white-space: norma
 .badge-self,
 .badge-unknown { color: var(--muted); }
 
+/* Tabs (Direct / Channels) */
+.tabs { display: flex; gap: 0.3rem; border-bottom: 1px solid var(--hairline); margin-bottom: 0.7rem; }
+.tab {
+  font: inherit; font-size: 0.82rem; cursor: pointer;
+  background: none; border: none; border-bottom: 2px solid transparent;
+  color: var(--muted); padding: 0.35rem 0.7rem; margin-bottom: -1px;
+}
+.tab:hover { color: var(--ink-2); }
+.tab.is-active { color: var(--net-meshcore); border-bottom-color: var(--net-meshcore); font-weight: 600; }
+
+/* Channel selector chips */
+.chan-chips { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 0.6rem; }
+.chan-chip {
+  font: inherit; font-size: 0.78rem; cursor: pointer;
+  padding: 0.2rem 0.7rem; border-radius: 999px;
+  border: 1px solid var(--hairline); background: var(--surface); color: var(--ink-2);
+}
+.chan-chip:hover { border-color: var(--net-meshcore); }
+.chan-chip.is-active { background: var(--net-meshcore); color: #fff; border-color: var(--net-meshcore); }
+.chan-chips .empty { color: var(--muted); font-style: italic; font-size: 0.8rem; }
+
+/* Map type filter */
+.map-filter { display: flex; flex-wrap: wrap; gap: 0.9rem; margin: 0 0 0.6rem; font-size: 0.8rem; color: var(--ink-2); }
+.map-filter label { display: inline-flex; align-items: center; gap: 0.3rem; cursor: pointer; }
+
+/* Row action buttons in the contacts table */
+.row-actions { display: flex; gap: 0.3rem; }
+.icon-btn {
+  font: inherit; font-size: 0.8rem; line-height: 1; cursor: pointer;
+  background: var(--surface); border: 1px solid var(--hairline); border-radius: 6px;
+  padding: 0.2rem 0.45rem; color: var(--ink-2);
+}
+.icon-btn:hover { border-color: var(--net-meshcore); color: var(--net-meshcore); }
+.icon-btn:disabled { opacity: 0.35; cursor: default; }
+
 .mc-actions { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
 .radio-info { font-size: 0.8rem; color: var(--ink-2); font-variant-numeric: tabular-nums; }
 .mc-radio-set { margin-top: 0.6rem; font-size: 0.82rem; }

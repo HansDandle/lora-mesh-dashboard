@@ -183,24 +183,69 @@ function renderMeshCore(snap) {
 
   const tbody = $("mc-contacts-table").querySelector("tbody");
   if (!contacts.length) {
-    tbody.innerHTML = `<tr><td colspan="2" class="empty">No contacts yet</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="3" class="empty">No contacts yet</td></tr>`;
   } else {
     const sorted = [...contacts].sort((a, b) => (b.last_advert || 0) - (a.last_advert || 0));
     tbody.replaceChildren(...sorted.map((c) => {
       const tr = document.createElement("tr");
-      tr.style.cursor = "pointer";
-      tr.title = "Click to message";
-      for (const text of [c.name || c.key, c.last_advert ? fmtAgo(c.last_advert) : "—"]) {
-        const td = document.createElement("td");
-        td.textContent = text;
-        tr.appendChild(td);
+      const name = c.name || c.key;
+      const nameTd = document.createElement("td");
+      nameTd.textContent = name;
+      const whenTd = document.createElement("td");
+      whenTd.textContent = c.last_advert ? fmtAgo(c.last_advert) : "—";
+
+      const actTd = document.createElement("td");
+      const actions = document.createElement("div");
+      actions.className = "row-actions";
+      // Only companions (type 1) are direct-message targets.
+      if (c.type !== 2 && c.type !== 3) {
+        const dm = document.createElement("button");
+        dm.className = "icon-btn"; dm.type = "button";
+        dm.textContent = "✉"; dm.title = "Message";
+        dm.addEventListener("click", () => dmContact(name));
+        actions.appendChild(dm);
       }
-      tr.addEventListener("click", () => dmContact(c.name || c.key));
+      const located = c.adv_lat && c.adv_lon && Math.abs(c.adv_lat) > 0.01;
+      const map = document.createElement("button");
+      map.className = "icon-btn"; map.type = "button";
+      map.textContent = "📍"; map.title = located ? "Show on map" : "No location known";
+      map.disabled = !located;
+      if (located) map.addEventListener("click", () => showOnMap(c.key, c.adv_lat, c.adv_lon));
+      actions.appendChild(map);
+      actTd.appendChild(actions);
+
+      tr.append(nameTd, whenTd, actTd);
       return tr;
     }));
   }
 
   renderMsgList($("mc-message-log"), mc.messages || []);
+  renderChannels(mc);
+}
+
+function renderChannels(mc) {
+  const channels = mc.channels || [];
+  const chips = $("mc-channels");
+  if (!channels.length) {
+    chips.innerHTML = `<span class="empty">No channels configured on the node</span>`;
+    _selChannel = null;
+  } else {
+    if (_selChannel == null || !channels.some((c) => c.idx === _selChannel)) {
+      _selChannel = channels[0].idx;
+    }
+    chips.replaceChildren(...channels.map((c) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "chan-chip" + (c.idx === _selChannel ? " is-active" : "");
+      b.textContent = c.name;
+      b.addEventListener("click", () => { _selChannel = c.idx; if (lastSnap) renderMeshCore(lastSnap); });
+      return b;
+    }));
+  }
+  const all = mc.channel_messages || [];
+  const shown = _selChannel == null ? all : all.filter((m) => m.channel_idx === _selChannel);
+  renderMsgList($("mc-channel-log"), shown);
+  $("mc-channel-text").disabled = _selChannel == null;
 }
 
 // Draw a minimal sparkline: a thin polyline scaled to the 200x40 viewBox.
@@ -282,6 +327,9 @@ function render(snap) {
 
 /* ---------- MeshCore contact map (Leaflet) ---------- */
 let _map = null, _markers = null;
+let _selChannel = null;              // selected channel idx in the Channels tab
+let _markerByKey = {};               // contact key -> Leaflet marker, for "show on map"
+let _typeFilter = new Set([1, 2, 3]); // contact types shown on the map
 
 function dmContact(name) {
   if (!name) return;
@@ -292,15 +340,26 @@ function dmContact(name) {
 }
 window._dm = dmContact;
 
+let _allLocated = [];
+
 async function loadMapContacts() {
   if (!_markers) return;
   try {
     const data = await (await fetch("/api/meshcore/contacts")).json();
-    const located = (data.contacts || []).filter(
+    _allLocated = (data.contacts || []).filter(
       (c) => c.lat && c.lon && Math.abs(c.lat) > 0.01);
-    $("map-count").textContent = located.length;
-    _markers.clearLayers();
-    const pts = [];
+    plotContacts();
+  } catch (e) { /* ignore */ }
+}
+
+function plotContacts() {
+  if (!_markers) return;
+  const located = _allLocated.filter((c) => _typeFilter.has(c.type || 1));
+  $("map-count").textContent = located.length;
+  _markers.clearLayers();
+  _markerByKey = {};
+  const pts = [];
+  {
     located.forEach((c) => {
       // MeshCore contact types: 1 = companion (DM target), 2 = repeater,
       // 3 = room server (you join/post to it, not a DM target).
@@ -334,11 +393,31 @@ async function loadMapContacts() {
       mk.on("popupopen", () => mk.unbindTooltip());
       mk.on("popupclose", () => mk.bindTooltip(info, { direction: "top", opacity: 0.96 }));
       _markers.addLayer(mk);
+      if (c.key) _markerByKey[c.key] = mk;
       pts.push([c.lat, c.lon]);
     });
     if (pts.length) _map.fitBounds(pts, { padding: [30, 30], maxZoom: 12 });
-  } catch (e) { /* ignore */ }
+  }
 }
+
+// Zoom the map to a contact and open its popup (called from the contacts table).
+function showOnMap(key, lat, lon) {
+  const mapEl = $("map");
+  if (mapEl) mapEl.scrollIntoView({ behavior: "smooth", block: "center" });
+  const go = () => {
+    const mk = key && _markerByKey[key];
+    if (mk) {
+      _map.setView(mk.getLatLng(), 14);
+      mk.openPopup();
+    } else if (lat && lon) {
+      _map.setView([lat, lon], 14);
+    }
+  };
+  // If the map hasn't plotted yet, load then zoom.
+  if (_map && Object.keys(_markerByKey).length) go();
+  else loadMapContacts().then(go);
+}
+window._showOnMap = showOnMap;
 
 function initMap() {
   if (!window.L || !document.getElementById("map")) return;
@@ -353,7 +432,30 @@ function initMap() {
   const r = $("map-refresh");
   if (r) r.addEventListener("click", (e) => { e.preventDefault(); loadMapContacts(); });
 }
+// Map type filter
+document.querySelectorAll(".map-type").forEach((cb) => {
+  cb.addEventListener("change", () => {
+    _typeFilter = new Set(
+      [...document.querySelectorAll(".map-type:checked")].map((c) => +c.value));
+    plotContacts();
+  });
+});
 initMap();
+
+/* ---------- MeshCore Direct/Channels tabs ---------- */
+document.querySelectorAll(".tabs .tab").forEach((tab) => {
+  tab.addEventListener("click", () => {
+    const which = tab.dataset.tab;
+    document.querySelectorAll(".tabs .tab").forEach((t) => {
+      const on = t === tab;
+      t.classList.toggle("is-active", on);
+      t.setAttribute("aria-selected", on ? "true" : "false");
+    });
+    document.querySelectorAll(".tabpane").forEach((p) => {
+      p.hidden = p.dataset.pane !== which;
+    });
+  });
+});
 
 /* ---------- websocket ---------- */
 
@@ -509,6 +611,35 @@ $("mc-send-form").addEventListener("submit", async (ev) => {
     if (resp.ok) {
       result.textContent = "sent ✓";
       $("mc-send-text").value = "";
+    } else {
+      const body = await resp.json().catch(() => ({}));
+      result.textContent = "failed: " + (body.detail || resp.status);
+    }
+  } catch (e) {
+    result.textContent = "failed: " + e;
+  } finally {
+    button.disabled = false;
+  }
+});
+
+$("mc-channel-form").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const text = $("mc-channel-text").value.trim();
+  const button = ev.target.querySelector("button");
+  const result = $("mc-channel-result");
+  if (_selChannel == null) { result.textContent = "no channel selected"; return; }
+  if (!text) { result.textContent = "enter a message"; return; }
+  button.disabled = true;
+  result.textContent = "sending…";
+  try {
+    const resp = await fetch("/api/meshcore/channel/send", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ idx: _selChannel, text }),
+    });
+    if (resp.ok) {
+      result.textContent = "sent ✓";
+      $("mc-channel-text").value = "";
     } else {
       const body = await resp.json().catch(() => ({}));
       result.textContent = "failed: " + (body.detail || resp.status);

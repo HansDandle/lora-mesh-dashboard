@@ -111,27 +111,49 @@
     <h3>Contacts <span id="mc-contact-badge" class="count-badge"></span></h3>
     <div class="table-wrap table-scroll">
       <table id="mc-contacts-table">
-        <thead><tr><th>Name</th><th>Last advert</th></tr></thead>
-        <tbody><tr><td colspan="2" class="empty">No contacts yet</td></tr></tbody>
+        <thead><tr><th>Name</th><th>Last advert</th><th></th></tr></thead>
+        <tbody><tr><td colspan="3" class="empty">No contacts yet</td></tr></tbody>
       </table>
     </div>
     <p class="mc-log"><span id="mc-logged">0</span> contacts logged to the dashboard database ·
       <a href="/api/meshcore/contacts.csv" download>download CSV</a></p>
 
     <h3>Messages</h3>
-    <ul id="mc-message-log" class="msg-log" aria-live="polite">
-      <li class="empty">No messages yet</li>
-    </ul>
+    <div class="tabs" role="tablist" aria-label="MeshCore messages">
+      <button type="button" class="tab is-active" data-tab="direct"
+              role="tab" aria-selected="true">Direct</button>
+      <button type="button" class="tab" data-tab="channels"
+              role="tab" aria-selected="false">Channels</button>
+    </div>
 
-    <form id="mc-send-form" class="send-row">
-      <input id="mc-send-to" type="text" class="send-to" placeholder="To (contact)"
-             list="mc-contacts-list" autocomplete="off" aria-label="Recipient contact">
-      <datalist id="mc-contacts-list"></datalist>
-      <input id="mc-send-text" type="text" maxlength="200" placeholder="Message…"
-             autocomplete="off" aria-label="Message text">
-      <button type="submit">Send</button>
-    </form>
-    <p id="mc-send-result" class="send-result" role="status"></p>
+    <div class="tabpane" data-pane="direct">
+      <ul id="mc-message-log" class="msg-log" aria-live="polite">
+        <li class="empty">No messages yet</li>
+      </ul>
+
+      <form id="mc-send-form" class="send-row">
+        <input id="mc-send-to" type="text" class="send-to" placeholder="To (contact)"
+               list="mc-contacts-list" autocomplete="off" aria-label="Recipient contact">
+        <datalist id="mc-contacts-list"></datalist>
+        <input id="mc-send-text" type="text" maxlength="200" placeholder="Message…"
+               autocomplete="off" aria-label="Message text">
+        <button type="submit">Send</button>
+      </form>
+      <p id="mc-send-result" class="send-result" role="status"></p>
+    </div>
+
+    <div class="tabpane" data-pane="channels" hidden>
+      <div id="mc-channels" class="chan-chips" role="tablist" aria-label="Channels"></div>
+      <ul id="mc-channel-log" class="msg-log" aria-live="polite">
+        <li class="empty">No channel messages yet</li>
+      </ul>
+      <form id="mc-channel-form" class="send-row">
+        <input id="mc-channel-text" type="text" maxlength="200" placeholder="Message the channel…"
+               autocomplete="off" aria-label="Channel message text">
+        <button type="submit">Send</button>
+      </form>
+      <p id="mc-channel-result" class="send-result" role="status"></p>
+    </div>
 
     <p class="footnote">Meshtastic (left) and MeshCore are two independent
     networks/protocols — separate boards, separate data.</p>
@@ -143,6 +165,11 @@
   <div class="map-head">
     <h2><span class="net-dot net-mc" aria-hidden="true"></span>MeshCore contact map</h2>
     <span class="net-tag"><span id="map-count">0</span> located · <a href="#" id="map-refresh">refresh</a></span>
+  </div>
+  <div id="map-filter" class="map-filter">
+    <label><input type="checkbox" class="map-type" value="1" checked> Companions</label>
+    <label><input type="checkbox" class="map-type" value="2" checked> Repeaters</label>
+    <label><input type="checkbox" class="map-type" value="3" checked> Room servers</label>
   </div>
   <div id="map"></div>
   <p class="map-note">Every located contact the dashboard has ever logged (repeaters

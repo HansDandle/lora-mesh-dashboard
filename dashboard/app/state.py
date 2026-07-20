@@ -28,6 +28,9 @@ class DashboardState:
         self._meshcore_self: dict[str, Any] = {}
         self._meshcore_contacts: dict[str, dict[str, Any]] = {}
         self._meshcore_messages: deque[dict[str, Any]] = deque(maxlen=message_log_size)
+        # Channels configured on Board 2, and the (separate) channel message log.
+        self._meshcore_channels: list[dict[str, Any]] = []
+        self._meshcore_channel_messages: deque[dict[str, Any]] = deque(maxlen=message_log_size)
         # Time-series for the antenna/signal tracker (one point per sample).
         # ~4h at 60s spacing.
         self._history: deque[dict[str, Any]] = deque(maxlen=240)
@@ -115,6 +118,18 @@ class DashboardState:
             self._notify()
         self._persist_message("meshcore", message)
 
+    def set_meshcore_channels(self, channels: list[dict[str, Any]]) -> None:
+        with self._lock:
+            self._meshcore_channels = list(channels)
+            self._notify()
+
+    def add_meshcore_channel_message(self, message: dict[str, Any]) -> None:
+        with self._lock:
+            message.setdefault("time", time.time())
+            self._meshcore_channel_messages.append(message)
+            self._notify()
+        self._persist_message("meshcore_channel", message)
+
     def _persist_message(self, network: str, message: dict[str, Any]) -> None:
         if self.persistence is not None:
             try:
@@ -153,6 +168,9 @@ class DashboardState:
                 self._messages.append(m)
             for m in persistence.load_recent_messages("meshcore", self._meshcore_messages.maxlen):
                 self._meshcore_messages.append(m)
+            for m in persistence.load_recent_messages(
+                    "meshcore_channel", self._meshcore_channel_messages.maxlen):
+                self._meshcore_channel_messages.append(m)
             for p in persistence.load_history(self._history.maxlen):
                 self._history.append(p)
         self._meshcore_logged = persistence.count_contacts()
@@ -172,6 +190,8 @@ class DashboardState:
                     "self": dict(self._meshcore_self),
                     "contacts": [dict(c) for c in self._meshcore_contacts.values()],
                     "messages": [dict(m) for m in self._meshcore_messages],
+                    "channels": [dict(c) for c in self._meshcore_channels],
+                    "channel_messages": [dict(m) for m in self._meshcore_channel_messages],
                     "logged": self._meshcore_logged,
                 },
                 "history": [dict(p) for p in self._history],

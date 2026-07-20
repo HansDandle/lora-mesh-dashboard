@@ -22,6 +22,11 @@ class MeshCoreSendRequest(BaseModel):
     text: str = Field(min_length=1, max_length=200)
 
 
+class MeshCoreChannelSendRequest(BaseModel):
+    idx: int = Field(ge=0, le=63)
+    text: str = Field(min_length=1, max_length=200)
+
+
 class AdvertRequest(BaseModel):
     flood: bool = True
 
@@ -72,6 +77,19 @@ async def meshcore_send(req: MeshCoreSendRequest, request: Request):
         raise HTTPException(status_code=503, detail=str(exc))
     except Exception as exc:
         log.exception("meshcore send failed")
+        raise HTTPException(status_code=502, detail=f"send failed: {exc}")
+    return {"ok": True}
+
+
+@router.post("/api/meshcore/channel/send")
+async def meshcore_channel_send(req: MeshCoreChannelSendRequest, request: Request):
+    source = request.app.state.meshcore
+    try:
+        await source.send_channel(req.idx, req.text)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    except Exception as exc:
+        log.exception("meshcore channel send failed")
         raise HTTPException(status_code=502, detail=f"send failed: {exc}")
     return {"ok": True}
 
