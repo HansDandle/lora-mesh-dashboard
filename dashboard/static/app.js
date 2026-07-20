@@ -300,10 +300,20 @@ async function loadMapContacts() {
         radius: 6, weight: 1, color: "#1a1a19",
         fillColor: rep ? "#eb6834" : "#4bd07a", fillOpacity: 0.85,
       });
+      const esc = (s) => String(s).replace(/[<>&]/g,
+        (m) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" }[m]));
+      const info = [
+        `<b>${esc(nm)}</b>`,
+        `${rep ? "◆ Repeater" : "● Companion"} · <code>${esc((c.key || "").slice(0, 10))}</code>`,
+        `📍 ${(+c.lat).toFixed(4)}, ${(+c.lon).toFixed(4)}`,
+        c.last_advert ? `last advert: ${fmtAgo(c.last_advert)}` : null,
+        c.first_seen ? `first seen: ${fmtAgo(c.first_seen)}` : null,
+        c.last_seen ? `logged: ${fmtAgo(c.last_seen)}` : null,
+      ].filter(Boolean).join("<br>");
+      mk.bindTooltip(info, { direction: "top", sticky: true, opacity: 0.96 });
       const safe = nm.replace(/[<>]/g, "").replace(/'/g, "\\'");
-      mk.bindPopup(
-        `<b>${nm.replace(/</g, "&lt;")}</b><br>${rep ? "Repeater" : "Companion"}<br>` +
-        `<a href="#" onclick="window._dm('${safe}');return false;">✉ message</a>`);
+      mk.bindPopup(info +
+        (rep ? "" : `<br><a href="#" onclick="window._dm('${safe}');return false;">✉ message</a>`));
       _markers.addLayer(mk);
       pts.push([c.lat, c.lon]);
     });
