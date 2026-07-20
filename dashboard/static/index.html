@@ -51,8 +51,9 @@
       </figure>
     </div>
 
-    <h3>Known nodes</h3>
-    <div class="table-wrap">
+    <h3>Known nodes <span id="node-count" class="count-badge"></span>
+      <label class="filter-toggle"><input type="checkbox" id="nodes-recent"> recent only</label></h3>
+    <div class="table-wrap table-scroll">
       <table id="nodes-table">
         <thead><tr><th>Node</th><th>Battery</th><th>SNR</th><th>Last heard</th><th>Contact</th></tr></thead>
         <tbody><tr><td colspan="5" class="empty">No nodes heard yet</td></tr></tbody>
@@ -107,8 +108,8 @@
       <p id="rf-result" class="send-result" role="status"></p>
     </details>
 
-    <h3>Contacts</h3>
-    <div class="table-wrap">
+    <h3>Contacts <span id="mc-contact-badge" class="count-badge"></span></h3>
+    <div class="table-wrap table-scroll">
       <table id="mc-contacts-table">
         <thead><tr><th>Name</th><th>Last advert</th></tr></thead>
         <tbody><tr><td colspan="2" class="empty">No contacts yet</td></tr></tbody>

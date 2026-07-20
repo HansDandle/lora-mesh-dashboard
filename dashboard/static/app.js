@@ -75,11 +75,19 @@ function contactBadge(n, myId) {
 
 function renderNodes(nodes, myId) {
   const tbody = $("nodes-table").querySelector("tbody");
-  if (!nodes.length) {
-    tbody.innerHTML = `<tr><td colspan="5" class="empty">No nodes heard yet</td></tr>`;
+  const recentOnly = $("nodes-recent").checked;
+  const now = Date.now() / 1000;
+  const list = recentOnly
+    ? nodes.filter((n) => n.last_heard && now - n.last_heard < 86400)
+    : nodes;
+  $("node-count").textContent = recentOnly
+    ? `${list.length} of ${nodes.length}` : `${nodes.length}`;
+  if (!list.length) {
+    tbody.innerHTML = `<tr><td colspan="5" class="empty">${
+      nodes.length ? "none heard in the last 24h" : "No nodes heard yet"}</td></tr>`;
     return;
   }
-  const sorted = [...nodes].sort((a, b) => (b.last_heard || 0) - (a.last_heard || 0));
+  const sorted = [...list].sort((a, b) => (b.last_heard || 0) - (a.last_heard || 0));
   tbody.replaceChildren(...sorted.map((n) => {
     const tr = document.createElement("tr");
     for (const text of [
@@ -157,6 +165,7 @@ function renderMeshCore(snap) {
 
   const contacts = mc.contacts || [];
   $("mc-contact-count").textContent = contacts.length || "0";
+  $("mc-contact-badge").textContent = contacts.length ? `${contacts.length} live` : "";
   $("mc-logged").textContent = mc.logged != null ? mc.logged : 0;
   $("mc-contacts-list").replaceChildren(...contacts.map((c) => {
     const o = document.createElement("option");
@@ -251,7 +260,9 @@ function checkWatchdog(snap) {
   if (b != null) alertPrev.batteryLow = low;
 }
 
+let lastSnap = null;
 function render(snap) {
+  lastSnap = snap;
   checkWatchdog(snap);
   renderSources(snap.sources || {});
   renderMyNode(snap.my_node || {});
@@ -369,6 +380,8 @@ $("send-form").addEventListener("submit", async (ev) => {
     button.disabled = false;
   }
 });
+
+$("nodes-recent").addEventListener("change", () => { if (lastSnap) render(lastSnap); });
 
 $("alerts-btn").addEventListener("click", async () => {
   if (!("Notification" in window)) {
