@@ -161,6 +161,26 @@ class DashboardState:
             except Exception:
                 pass
 
+    def reload_meshcore_history(self, persistence) -> None:
+        """Rebuild the in-memory MeshCore logs from the DB (e.g. after a phone
+        export is imported), sorted by time so imported history interleaves."""
+        with self._lock:
+            dm = persistence.load_recent_messages("meshcore", self._meshcore_messages.maxlen)
+            ch = persistence.load_recent_messages(
+                "meshcore_channel", self._meshcore_channel_messages.maxlen)
+            dm.sort(key=lambda m: m.get("time", 0))
+            ch.sort(key=lambda m: m.get("time", 0))
+            self._meshcore_messages.clear()
+            self._meshcore_messages.extend(dm)
+            self._meshcore_channel_messages.clear()
+            self._meshcore_channel_messages.extend(ch)
+            self._notify()
+        if persistence is not None:
+            try:
+                self._meshcore_logged = persistence.count_contacts()
+            except Exception:
+                pass
+
     def load_from(self, persistence) -> None:
         """Prime in-memory state from the DB at startup."""
         with self._lock:

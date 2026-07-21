@@ -4,8 +4,11 @@ import asyncio
 import csv
 import io
 import logging
+import os
+import tempfile
 
-from fastapi import APIRouter, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi import (APIRouter, File, HTTPException, Request, UploadFile,
+                     WebSocket, WebSocketDisconnect)
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
@@ -147,6 +150,34 @@ def meshcore_contacts(request: Request):
     p = request.app.state.dashboard.persistence
     rows = p.load_contacts() if p is not None else []
     return {"count": len(rows), "contacts": rows}
+
+
+@router.post("/api/meshcore/import")
+async def meshcore_import(request: Request, file: UploadFile = File(...)):
+    """Fold a MeshCore phone-app DB export into the dashboard's durable log."""
+    from .phone_import import import_phone_db
+    dash = request.app.state.dashboard
+    if dash.persistence is None:
+        raise HTTPException(status_code=503, detail="persistence not available")
+    data = await file.read()
+    if len(data) < 100 or data[:16] != b"SQLite format 3\x00":
+        raise HTTPException(status_code=400, detail="not a SQLite database file")
+    fd, tmp = tempfile.mkstemp(suffix=".db")
+    try:
+        with os.fdopen(fd, "wb") as f:
+            f.write(data)
+        try:
+            counts = await asyncio.to_thread(import_phone_db, tmp, dash.persistence)
+        except Exception as exc:
+            log.exception("phone import failed")
+            raise HTTPException(status_code=422, detail=f"import failed: {exc}")
+        dash.reload_meshcore_history(dash.persistence)
+    finally:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+    return {"ok": True, **counts}
 
 
 @router.get("/api/meshcore/contacts.csv")

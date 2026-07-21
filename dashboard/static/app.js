@@ -131,7 +131,9 @@ function renderMsgList(log, messages) {
     const meta = document.createElement("span");
     meta.className = "msg-meta";
     const when = m.time ? new Date(m.time * 1000).toLocaleTimeString() : "";
-    meta.textContent = `${when} ${m.from || "?"}`;
+    let metaText = `${when} ${m.from || "?"}`;
+    if (m.hops != null) metaText += ` · ${m.hops} hop${m.hops === 1 ? "" : "s"}`;
+    meta.textContent = metaText;
     li.appendChild(meta);
     li.appendChild(document.createTextNode(m.text || ""));
     return li;
@@ -149,10 +151,12 @@ function renderMeshCore(snap) {
   const paused = !!(src && (src.detail || "").toLowerCase().includes("paused"));
   const toggle = $("mc-toggle");
   if (paused) {
-    toggle.textContent = "Reconnect dashboard";
+    toggle.textContent = "Enable auto-logging";
+    toggle.title = "Dashboard holds the connection and logs everything, yielding to the phone when it connects";
     toggle.dataset.action = "resume";
   } else {
     toggle.textContent = "Release to phone";
+    toggle.title = "Fully release Board 2 to the phone — dashboard won't reconnect until you re-enable";
     toggle.dataset.action = "pause";
   }
 
@@ -300,7 +304,8 @@ function checkWatchdog(snap) {
   for (const [name, s] of Object.entries(sources)) {
     const connected = !!(s && s.connected);
     const detail = (s && s.detail || "").toLowerCase();
-    const intentional = detail.includes("paused") || detail.includes("disabled");
+    const intentional = detail.includes("paused") || detail.includes("disabled")
+      || detail.includes("yielding");
     if (alertPrev.sources[name] === true && !connected && !intentional) {
       fireAlert(`${SRC_LABEL[name] || name} went offline`);
     }
@@ -613,6 +618,36 @@ $("mc-send-form").addEventListener("submit", async (ev) => {
       $("mc-send-text").value = "";
     } else {
       const body = await resp.json().catch(() => ({}));
+      result.textContent = "failed: " + (body.detail || resp.status);
+    }
+  } catch (e) {
+    result.textContent = "failed: " + e;
+  } finally {
+    button.disabled = false;
+  }
+});
+
+$("mc-import-form").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const input = $("mc-import-file");
+  const result = $("mc-import-result");
+  const file = input.files && input.files[0];
+  if (!file) { result.textContent = "choose an exported .db file first"; return; }
+  const button = ev.target.querySelector("button");
+  button.disabled = true;
+  result.textContent = "importing…";
+  try {
+    const fd = new FormData();
+    fd.append("file", file);
+    const resp = await fetch("/api/meshcore/import", { method: "POST", body: fd });
+    const body = await resp.json().catch(() => ({}));
+    if (resp.ok) {
+      result.textContent =
+        `✓ imported ${body.contact_messages} DMs, ${body.channel_messages} channel msgs, ` +
+        `${body.contacts} contacts (${body.skipped} already had)`;
+      input.value = "";
+      loadMapContacts();
+    } else {
       result.textContent = "failed: " + (body.detail || resp.status);
     }
   } catch (e) {

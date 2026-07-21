@@ -277,4 +277,9 @@ td.empty, li.empty { color: var(--muted); font-style: italic; white-space: norma
 .mc-log { font-size: 0.72rem; color: var(--muted); margin: 0.45rem 0 0; }
 .mc-log a { color: var(--net-meshcore); }
 
+.mc-import { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin-top: 0.5rem; }
+.import-label { font-size: 0.72rem; color: var(--muted); display: flex; flex-direction: column; gap: 0.2rem; }
+.import-label input[type="file"] { font-size: 0.72rem; color: var(--ink-2); max-width: 15rem; }
+.import-result { font-size: 0.75rem; color: var(--ink-2); }
+
 .footnote { color: var(--muted); font-size: 0.78rem; margin-top: 1.1rem; }

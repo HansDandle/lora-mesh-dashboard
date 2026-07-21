@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from typing import Any
 
 from .state import DashboardState
@@ -17,6 +18,17 @@ log = logging.getLogger("meshcore_source")
 
 _RECONNECT_SECS = 15
 _REFRESH_SECS = 30
+# Contention-aware auto-yield: Board 2's WiFi firmware is effectively
+# single-client (last connection wins), so the phone and the dashboard fight
+# over one slot. A healthy session the phone isn't touching lasts far longer
+# than _CONTEND_SECS; a phone actively reclaiming kills our session in a few
+# seconds. After _CONTEND_THRESHOLD consecutive short sessions we assume the
+# phone has it and back off for _YIELD_SECS (probing once per interval) instead
+# of kicking the phone every reconnect. We reclaim automatically once a probe
+# holds steady (phone disconnected).
+_CONTEND_SECS = 25
+_CONTEND_THRESHOLD = 2
+_YIELD_SECS = 120
 
 
 class MeshCoreSource:
@@ -31,6 +43,9 @@ class MeshCoreSource:
         # Runtime "release the single TCP slot to the phone" toggle.
         self._paused = False
         self._wake = asyncio.Event()
+        # Consecutive short-lived sessions — the signature of the phone holding
+        # the slot. Drives the polite auto-yield backoff.
+        self._short_sessions = 0
 
     # -- lifecycle ----------------------------------------------------------
 
@@ -51,6 +66,7 @@ class MeshCoreSource:
     def resume(self) -> None:
         """Reclaim the connection for the dashboard."""
         self._paused = False
+        self._short_sessions = 0  # user explicitly wants it back — probe now
         self._wake.set()
 
     @property
@@ -190,9 +206,11 @@ class MeshCoreSource:
             if self._paused:
                 self.state.set_source_status(
                     "meshcore", False, "paused — Board 2 released to the phone/app")
+                self._short_sessions = 0
                 self._wake.clear()
                 await self._wake.wait()  # until resume() or stop()
                 continue
+            connected_at: float | None = None
             try:
                 self.state.set_source_status(
                     "meshcore", False, f"connecting to {self.host}:{self.port}")
@@ -207,7 +225,9 @@ class MeshCoreSource:
                 await self._refresh_self()
                 await self._refresh_contacts()
                 await self._refresh_channels()
-                self.state.set_source_status("meshcore", True, f"{self.host}:{self.port}")
+                connected_at = time.monotonic()
+                self.state.set_source_status(
+                    "meshcore", True, f"logging · {self.host}:{self.port}")
 
                 while not self._stop.is_set() and not self._paused and self.mc.is_connected:
                     await self._interruptible_sleep(_REFRESH_SECS)
@@ -227,7 +247,21 @@ class MeshCoreSource:
                         await mc.disconnect()
                     except Exception:
                         pass
-            if not self._paused and not self._stop.is_set():
+            if self._paused or self._stop.is_set():
+                continue
+            # Contention accounting: a session that held past _CONTEND_SECS means
+            # we had the slot to ourselves; a short one means we're being kicked.
+            session = (time.monotonic() - connected_at) if connected_at else 0.0
+            if session >= _CONTEND_SECS:
+                self._short_sessions = 0
+            else:
+                self._short_sessions += 1
+            if self._short_sessions >= _CONTEND_THRESHOLD:
+                self.state.set_source_status(
+                    "meshcore", False,
+                    "yielding to phone — will reclaim automatically when it disconnects")
+                await self._interruptible_sleep(_YIELD_SECS)
+            else:
                 await self._interruptible_sleep(_RECONNECT_SECS)
 
     # -- event handlers -----------------------------------------------------
@@ -244,13 +278,26 @@ class MeshCoreSource:
     async def _on_channel_message(self, event) -> None:
         p = getattr(event, "payload", None) or {}
         idx = p.get("channel_idx")
+        text = p.get("text", "")
+        # Channel packets carry no sender pubkey; the sender's node prepends its
+        # own name as "Name: message". Split it out for display.
+        sender = None
+        if ": " in text:
+            head, rest = text.split(": ", 1)
+            if head and len(head) <= 32:
+                sender, text = head, rest
+        # path_len: 0..62 = hops, 255 = direct/flood (no cached path).
+        plen = p.get("path_len")
+        hops = plen if isinstance(plen, int) and 0 <= plen < 63 else None
         self.state.add_meshcore_channel_message({
             "network": "meshcore",
             "direction": "rx",
             "channel_idx": idx,
             "channel": self._channel_name(idx),
-            "from": p.get("pubkey_prefix") or p.get("from") or "?",
-            "text": p.get("text", ""),
+            "from": sender or "(unnamed)",
+            "text": text,
+            "hops": hops,
+            "sender_time": p.get("sender_timestamp"),
         })
 
     # -- refreshers ---------------------------------------------------------

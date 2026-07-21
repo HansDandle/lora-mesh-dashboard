@@ -1,4 +1,5 @@
 fastapi>=0.115
+python-multipart>=0.0.9
 uvicorn[standard]>=0.30
 meshtastic>=2.5
 meshcore>=1.1

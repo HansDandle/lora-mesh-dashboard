@@ -117,6 +117,14 @@
     </div>
     <p class="mc-log"><span id="mc-logged">0</span> contacts logged to the dashboard database ·
       <a href="/api/meshcore/contacts.csv" download>download CSV</a></p>
+    <form id="mc-import-form" class="mc-import">
+      <label class="import-label">
+        Import phone-app export (.db)
+        <input id="mc-import-file" type="file" accept=".db,.sqlite,.sqlite3,application/x-sqlite3">
+      </label>
+      <button type="submit" class="toggle-btn">Import history</button>
+      <span id="mc-import-result" class="import-result" role="status"></span>
+    </form>
 
     <h3>Messages</h3>
     <div class="tabs" role="tablist" aria-label="MeshCore messages">

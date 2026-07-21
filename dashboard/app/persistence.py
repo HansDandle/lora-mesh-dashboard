@@ -24,6 +24,14 @@ class Persistence:
             "CREATE TABLE IF NOT EXISTS messages "
             "(id INTEGER PRIMARY KEY AUTOINCREMENT, network TEXT, time REAL, data TEXT)"
         )
+        # `dedup` lets imports (e.g. a phone-app DB export) be re-run without
+        # duplicating rows. Live messages leave it NULL; SQLite allows many
+        # NULLs under a UNIQUE index, so only keyed (imported) rows dedupe.
+        mcols = {r[1] for r in self.conn.execute("PRAGMA table_info(messages)").fetchall()}
+        if "dedup" not in mcols:
+            self.conn.execute("ALTER TABLE messages ADD COLUMN dedup TEXT")
+        self.conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_dedup ON messages(dedup)")
         self.conn.execute(
             "CREATE TABLE IF NOT EXISTS history (t REAL PRIMARY KEY, data TEXT)"
         )
@@ -50,6 +58,17 @@ class Persistence:
                 (network, msg.get("time", time.time()), json.dumps(msg)),
             )
             self.conn.commit()
+
+    def import_message(self, network: str, msg: dict[str, Any], dedup: str) -> bool:
+        """Insert a message idempotently by dedup key. Returns True if inserted,
+        False if it was already present."""
+        with self._lock:
+            cur = self.conn.execute(
+                "INSERT OR IGNORE INTO messages(network, time, data, dedup) VALUES (?,?,?,?)",
+                (network, msg.get("time", time.time()), json.dumps(msg), dedup),
+            )
+            self.conn.commit()
+            return cur.rowcount > 0
 
     def save_history(self, point: dict[str, Any]) -> None:
         with self._lock:
