@@ -657,6 +657,67 @@ $("mc-import-form").addEventListener("submit", async (ev) => {
   }
 });
 
+/* ---------- prune contacts ---------- */
+function pruneBody(apply) {
+  const body = { apply };
+  if ($("prune-stale").checked) body.stale_days = Math.max(1, +$("prune-days").value || 90);
+  if ($("prune-far").checked) body.max_km = Math.max(1, +$("prune-km").value || 50);
+  return body;
+}
+
+async function pruneRequest(apply) {
+  const body = pruneBody(apply);
+  if (body.stale_days == null && body.max_km == null) {
+    $("prune-result").textContent = "pick at least one rule (stale and/or distance)";
+    return null;
+  }
+  const resp = await fetch("/api/meshcore/prune", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const data = await resp.json().catch(() => ({}));
+  if (!resp.ok) { $("prune-result").textContent = "failed: " + (data.detail || resp.status); return null; }
+  return data;
+}
+
+$("prune-preview").addEventListener("click", async () => {
+  $("prune-result").textContent = "checking…";
+  const d = await pruneRequest(false);
+  if (!d) return;
+  $("prune-result").textContent =
+    `${d.candidates} of ${d.repeaters} repeaters match (node has ${d.total} contacts).`;
+  const list = $("prune-list");
+  list.replaceChildren(...(d.sample || []).map((c) => {
+    const li = document.createElement("li");
+    const nm = document.createElement("span");
+    nm.textContent = c.name;
+    const meta = document.createElement("span");
+    meta.className = "pl-meta";
+    const bits = [];
+    if (c.km != null) bits.push(`${c.km} km`);
+    if (c.age_days != null) bits.push(`${c.age_days}d`);
+    meta.textContent = bits.join(" · ") + (c.reasons ? "  (" + c.reasons.join("+") + ")" : "");
+    li.append(nm, meta);
+    return li;
+  }));
+  const apply = $("prune-apply");
+  apply.disabled = d.candidates === 0;
+  apply.textContent = d.candidates ? `Remove ${d.candidates}` : "Remove";
+});
+
+$("prune-apply").addEventListener("click", async () => {
+  const btn = $("prune-apply");
+  btn.disabled = true;
+  $("prune-result").textContent = "removing…";
+  const d = await pruneRequest(true);
+  if (!d) { return; }
+  $("prune-result").textContent =
+    `✓ removed ${d.removed} repeater${d.removed === 1 ? "" : "s"} — node now has ${d.total - d.removed} contacts.`;
+  $("prune-list").replaceChildren();
+  btn.textContent = "Remove";
+  loadMapContacts();
+});
+
 $("mc-channel-form").addEventListener("submit", async (ev) => {
   ev.preventDefault();
   const text = $("mc-channel-text").value.trim();

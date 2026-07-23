@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import math
 import time
 from typing import Any
 
@@ -30,6 +31,19 @@ _CONTEND_SECS = 25
 _CONTEND_THRESHOLD = 2
 _YIELD_SECS = 120
 
+# Fallback home location (San Leanna) if the node hasn't advertised its own.
+_HOME_FALLBACK = (30.1485, -97.8548)
+
+
+def _haversine_km(a: tuple[float, float], lat: float, lon: float) -> float:
+    R = 6371.0
+    p = math.pi / 180
+    dla = (lat - a[0]) * p
+    dlo = (lon - a[1]) * p
+    h = (math.sin(dla / 2) ** 2
+         + math.cos(a[0] * p) * math.cos(lat * p) * math.sin(dlo / 2) ** 2)
+    return 2 * R * math.asin(math.sqrt(h))
+
 
 class MeshCoreSource:
     def __init__(self, state: DashboardState, host: str, port: int = 5000):
@@ -40,6 +54,10 @@ class MeshCoreSource:
         self._task: asyncio.Task | None = None
         self._stop = asyncio.Event()
         self._channels: dict[int, str] = {}  # idx -> name, for tagging messages
+        self._home: tuple[float, float] | None = None  # node's own advertised location
+        # Serializes command I/O on the shared connection so a prune's
+        # get_contacts/remove_contact can't interleave with the refresh loop.
+        self._io_lock = asyncio.Lock()
         # Runtime "release the single TCP slot to the phone" toggle.
         self._paused = False
         self._wake = asyncio.Event()
@@ -135,6 +153,75 @@ class MeshCoreSource:
             return "?"
         return self._channels.get(int(idx), f"ch{idx}")
 
+    async def prune_contacts(self, stale_days: float | None = None,
+                             max_km: float | None = None,
+                             apply: bool = False) -> dict[str, Any]:
+        """Preview or apply a repeater-only contact prune.
+
+        Candidates are type-2 (repeater) contacts that are either stale
+        (last advert older than `stale_days`, or never re-heard) or farther
+        than `max_km` from the node's own location. Companions and room
+        servers are never touched. With apply=False it's a dry run.
+        """
+        mc = self.mc
+        if mc is None:
+            raise RuntimeError("MeshCore node not connected (released to the phone?)")
+        from meshcore import EventType
+        if stale_days is None and max_km is None:
+            raise RuntimeError("choose a stale-days and/or distance rule")
+        async with self._io_lock:
+            r = await mc.commands.get_contacts()
+        cs = r.payload or {}
+        home = self._home or _HOME_FALLBACK
+        now = time.time()
+        repeaters = 0
+        candidates: list[dict[str, Any]] = []
+        for key, c in cs.items():
+            if c.get("type") != 2:
+                continue  # only ever prune repeaters
+            repeaters += 1
+            name = c.get("adv_name") or str(key)[:8]
+            la = c.get("last_advert") or c.get("adv_timestamp")
+            reasons = []
+            if stale_days is not None and ((not la) or (now - la) > stale_days * 86400):
+                reasons.append("stale")
+            dist = None
+            lat, lon = c.get("adv_lat"), c.get("adv_lon")
+            if max_km is not None and lat and lon and abs(lat) > 0.01:
+                dist = _haversine_km(home, lat, lon)
+                if dist > max_km:
+                    reasons.append("far")
+            if reasons:
+                candidates.append({
+                    "key": key, "name": name, "reasons": reasons,
+                    "km": round(dist) if dist is not None else None,
+                    "age_days": round((now - la) / 86400) if la else None,
+                })
+        candidates.sort(key=lambda x: (x["km"] if x["km"] is not None else -1), reverse=True)
+        out = {
+            "total": len(cs), "repeaters": repeaters,
+            "candidates": len(candidates), "home": list(home),
+            "sample": candidates[:60], "removed": 0, "applied": False,
+        }
+        if apply and candidates:
+            removed = failed = 0
+            async with self._io_lock:
+                for cand in candidates:
+                    try:
+                        rr = await mc.commands.remove_contact(bytes.fromhex(cand["key"]))
+                        if getattr(rr, "type", None) == EventType.ERROR:
+                            failed += 1
+                        else:
+                            removed += 1
+                    except Exception:
+                        failed += 1
+                    await asyncio.sleep(0.1)
+            out["removed"] = removed
+            out["failed"] = failed
+            out["applied"] = True
+            await self._refresh_contacts()
+        return out
+
     async def _readd_from_log(self, to: str):
         """Rebuild a node contact record from the DB log and add it back, so a
         contact that aged off the node (or was cleared by a reboot) becomes
@@ -222,9 +309,10 @@ class MeshCoreSource:
                     self.mc.subscribe(chan, self._on_channel_message)
 
                 await self.mc.start_auto_message_fetching()
-                await self._refresh_self()
-                await self._refresh_contacts()
-                await self._refresh_channels()
+                async with self._io_lock:
+                    await self._refresh_self()
+                    await self._refresh_contacts()
+                    await self._refresh_channels()
                 connected_at = time.monotonic()
                 self.state.set_source_status(
                     "meshcore", True, f"logging · {self.host}:{self.port}")
@@ -233,8 +321,9 @@ class MeshCoreSource:
                     await self._interruptible_sleep(_REFRESH_SECS)
                     if self._stop.is_set() or self._paused:
                         break
-                    await self._refresh_self()
-                    await self._refresh_contacts()
+                    async with self._io_lock:
+                        await self._refresh_self()
+                        await self._refresh_contacts()
             except asyncio.CancelledError:
                 break
             except Exception as exc:
@@ -311,6 +400,9 @@ class MeshCoreSource:
             r = await mc.commands.send_appstart()
             if getattr(r, "type", None) != EventType.ERROR:
                 info = r.payload or {}
+                lat, lon = info.get("adv_lat"), info.get("adv_lon")
+                if lat and lon and abs(lat) > 0.01:
+                    self._home = (lat, lon)
                 self.state.set_meshcore_self({
                     "name": info.get("name") or info.get("adv_name"),
                     "public_key": info.get("public_key"),

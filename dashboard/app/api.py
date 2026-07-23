@@ -25,6 +25,12 @@ class MeshCoreSendRequest(BaseModel):
     text: str = Field(min_length=1, max_length=200)
 
 
+class PruneRequest(BaseModel):
+    stale_days: float | None = Field(default=None, ge=1, le=3650)
+    max_km: float | None = Field(default=None, ge=1, le=20000)
+    apply: bool = False
+
+
 class MeshCoreChannelSendRequest(BaseModel):
     idx: int = Field(ge=0, le=63)
     text: str = Field(min_length=1, max_length=200)
@@ -82,6 +88,20 @@ async def meshcore_send(req: MeshCoreSendRequest, request: Request):
         log.exception("meshcore send failed")
         raise HTTPException(status_code=502, detail=f"send failed: {exc}")
     return {"ok": True}
+
+
+@router.post("/api/meshcore/prune")
+async def meshcore_prune(req: PruneRequest, request: Request):
+    """Preview (apply=false) or apply a repeater-only contact prune."""
+    try:
+        res = await request.app.state.meshcore.prune_contacts(
+            req.stale_days, req.max_km, req.apply)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    except Exception as exc:
+        log.exception("meshcore prune failed")
+        raise HTTPException(status_code=502, detail=f"prune failed: {exc}")
+    return {"ok": True, **res}
 
 
 @router.post("/api/meshcore/channel/send")

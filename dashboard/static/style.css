@@ -282,4 +282,21 @@ td.empty, li.empty { color: var(--muted); font-style: italic; white-space: norma
 .import-label input[type="file"] { font-size: 0.72rem; color: var(--ink-2); max-width: 15rem; }
 .import-result { font-size: 0.75rem; color: var(--ink-2); }
 
+/* Prune contacts panel */
+.prune-box { margin-top: 0.6rem; font-size: 0.8rem; }
+.prune-box summary { cursor: pointer; color: var(--ink-2); }
+.prune-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem 0.9rem; margin: 0.6rem 0; }
+.prune-controls label { display: inline-flex; align-items: center; gap: 0.3rem; color: var(--ink-2); }
+.prune-controls input[type="number"] {
+  width: 4.5rem; background: var(--page); color: var(--ink);
+  border: 1px solid var(--hairline); border-radius: 6px; padding: 0.2rem 0.4rem; font: inherit;
+}
+.prune-actions { display: flex; gap: 0.4rem; }
+.prune-list { list-style: none; margin: 0.4rem 0 0; padding: 0; max-height: 200px; overflow-y: auto;
+  font-size: 0.75rem; color: var(--ink-2); }
+.prune-list li { padding: 0.15rem 0; border-bottom: 1px solid var(--hairline); display: flex; justify-content: space-between; gap: 0.6rem; }
+.prune-list li:last-child { border-bottom: none; }
+.prune-list .pl-meta { color: var(--muted); white-space: nowrap; }
+.prune-note { font-size: 0.7rem; color: var(--muted); margin: 0.5rem 0 0; }
+
 .footnote { color: var(--muted); font-size: 0.78rem; margin-top: 1.1rem; }
